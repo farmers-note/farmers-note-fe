@@ -1,5 +1,5 @@
-import 'package:farmers_note/crop_identification_screen.dart';
-import 'package:farmers_note/disease_diagnosis_screen.dart';
+import 'package:farmers_note/view/crop_identification_screen.dart';
+import 'package:farmers_note/view/disease_diagnosis_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
