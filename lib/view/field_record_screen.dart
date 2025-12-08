@@ -122,8 +122,9 @@ class _FieldRecordScreenState extends ConsumerState<FieldRecordScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 validator: (value) {
                   if (value == null || value.isEmpty) return '밭 규모를 입력해주세요.';
-                  if (int.tryParse(value) == null || int.parse(value)! <= 0)
+                  if (int.tryParse(value) == null || int.parse(value) <= 0) {
                     return '유효한 평수를 입력해주세요.';
+                  }
                   return null;
                 },
                 onSaved: (value) => _sizePyeong = int.parse(value!),
