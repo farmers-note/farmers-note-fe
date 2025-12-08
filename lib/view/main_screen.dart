@@ -1,5 +1,6 @@
 import 'package:farmers_note/view/crop_identification_screen.dart';
 import 'package:farmers_note/view/disease_diagnosis_screen.dart';
+import 'package:farmers_note/view/field_management_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -64,6 +65,22 @@ class MainScreenState extends ConsumerState<MainScreen> {
                   );
                 },
               ),
+              const SizedBox(height: 30),
+              // 3. 밭 상태 기록 및 관리 기능 버튼
+              _FeatureCard(
+                icon: Icons.format_list_bulleted_add,
+                title: '밭 기록 및 관리 (Field Record)',
+                description: '날짜, 규모, 질병 상태 등 밭 상태를 기록하고 관리합니다.',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      // FieldManagementScreen으로 이동
+                      builder: (context) => const FieldManagementScreen(),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -97,6 +114,7 @@ class _FeatureCard extends StatelessWidget {
           padding: const EdgeInsets.all(20.0),
           child: Row(
             children: <Widget>[
+              // 아이콘 색상 및 크기 조정
               Icon(icon, size: 40, color: Theme.of(context).primaryColor),
               const SizedBox(width: 20),
               Expanded(

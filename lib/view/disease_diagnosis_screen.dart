@@ -1,21 +1,127 @@
-import 'package:flutter/material.dart';
+// lib/screens/disease_diagnosis_screen.dart
 
-class DiseaseDiagnosisScreen extends StatefulWidget {
+import 'dart:io';
+import 'dart:typed_data'; // Uint8List 사용
+import 'package:farmers_note/exception/api_exception.dart';
+import 'package:farmers_note/viewmodel/provider.dart';
+import 'package:flutter/foundation.dart'; // kIsWeb 사용
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+class DiseaseDiagnosisScreen extends ConsumerStatefulWidget {
   const DiseaseDiagnosisScreen({super.key});
 
   @override
-  State<DiseaseDiagnosisScreen> createState() => _DiseaseDiagnosisScreenState();
+  ConsumerState<DiseaseDiagnosisScreen> createState() =>
+      _DiseaseDiagnosisScreenState();
 }
 
-class _DiseaseDiagnosisScreenState extends State<DiseaseDiagnosisScreen> {
-  // 6가지 지원 작물 리스트
-  final List<String> _crops = ['토마토', '감자', '옥수수', '딸기', '오이', '벼'];
-  String? _selectedCrop; // 현재 선택된 작물
+class _DiseaseDiagnosisScreenState
+    extends ConsumerState<DiseaseDiagnosisScreen> {
+  // 지원 작물 리스트 및 서버 모델 키 매핑
+  final List<String> _cropNames = ['토마토', '감자', '옥수수', '딸기', '오이', '벼'];
+  final Map<String, String> _cropModelKeys = {
+    '토마토': 'tomato',
+    '감자': 'potato',
+    '옥수수': 'corn',
+    '딸기': 'strawberry',
+    '오이': 'cucumber',
+    '벼': 'rice',
+  };
 
-  @override
-  void initState() {
-    super.initState();
-    _selectedCrop = _crops.first; // 기본값으로 토마토 설정
+  String _selectedCropName = '토마토';
+
+  // 🚨 웹/모바일 통합 상태 변수
+  XFile? _pickedFile;
+  Uint8List? _imageBytes; // 웹 미리보기 및 FormData 생성을 위해 사용
+
+  String _result = '작물을 선택하고, 이미지 촬영/선택 후 질병을 진단하세요.';
+  bool _isLoading = false;
+
+  final ImagePicker _picker = ImagePicker();
+
+  // 1. 이미지 선택 및 추론 로직
+  Future<void> _pickImage(ImageSource source) async {
+    if (_isLoading) return;
+
+    final pickedFile = await _picker.pickImage(source: source);
+
+    if (pickedFile != null) {
+      // 웹 환경인 경우 바이트 데이터 미리 로드 (미리보기 용)
+      if (kIsWeb) {
+        final bytes = await pickedFile.readAsBytes();
+        setState(() {
+          _imageBytes = bytes;
+        });
+      }
+
+      setState(() {
+        _pickedFile = pickedFile;
+        // _imageFile 사용 제거 (웹/모바일 통합)
+        _result = '$_selectedCropName 질병 분류 중...';
+        _isLoading = true;
+      });
+
+      final modelKey = _cropModelKeys[_selectedCropName]!;
+      await _predict(modelKey, pickedFile);
+    } else {
+      _showSnackBar('이미지 선택이 취소되었습니다.');
+    }
+  }
+
+  // 2. 모델 추론 API 호출 (XFile 기반으로 FormData 생성)
+  Future<void> _predict(String modelKey, XFile pickedFile) async {
+    final repository = ref.read(fieldRecordRepositoryProvider);
+
+    try {
+      FormData formData;
+
+      if (kIsWeb) {
+        // 🚨 웹 환경: MultipartFile.fromBytes 사용
+        final bytes = await pickedFile.readAsBytes();
+        formData = FormData.fromMap({
+          "file": MultipartFile.fromBytes(bytes, filename: pickedFile.name),
+        });
+      } else {
+        // 🚨 모바일 환경: MultipartFile.fromFile 사용
+        formData = FormData.fromMap({
+          "file": await MultipartFile.fromFile(
+            pickedFile.path,
+            filename: pickedFile.name,
+          ),
+        });
+      }
+
+      final prediction = await repository.predictCrop(modelKey, formData);
+
+      setState(() {
+        _result = '진단 결과: $prediction';
+      });
+    } on ApiException catch (e) {
+      setState(() {
+        _result = 'API 오류 발생 (Status ${e.status}): ${e.message}';
+      });
+    } on Exception catch (e) {
+      setState(() {
+        _result = '알 수 없는 오류 발생: ${e}';
+      });
+    } catch (e) {
+      setState(() {
+        _result = '예외 발생: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -36,7 +142,7 @@ class _DiseaseDiagnosisScreenState extends State<DiseaseDiagnosisScreen> {
             const SizedBox(height: 30),
 
             Text(
-              '$_selectedCrop의 질병 진단을 위해 카메라로 촬영하거나 이미지를 선택해 주세요.',
+              '$_selectedCropName의 질병 진단을 위해 이미지를 선택해 주세요.',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
@@ -46,55 +152,106 @@ class _DiseaseDiagnosisScreenState extends State<DiseaseDiagnosisScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: <Widget>[
-                ElevatedButton.icon(
-                  onPressed: () {
-                    // TODO: 카메라 실행 로직 구현
-                    _showSnackBar(context, '카메라 실행 예정 (선택 작물: $_selectedCrop)');
-                  },
-                  icon: const Icon(Icons.camera_alt),
-                  label: const Text('사진 촬영'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 15,
-                    ),
-                  ),
+                _buildImageButton(
+                  icon: Icons.camera_alt,
+                  label: '사진 촬영',
+                  onPressed: () => _pickImage(ImageSource.camera),
                 ),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    // TODO: 갤러리 선택 로직 구현
-                    _showSnackBar(context, '갤러리 선택 예정 (선택 작물: $_selectedCrop)');
-                  },
-                  icon: const Icon(Icons.photo_library),
-                  label: const Text('갤러리에서 선택'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 15,
-                    ),
-                  ),
+                _buildImageButton(
+                  icon: Icons.photo_library,
+                  label: '갤러리에서 선택',
+                  onPressed: () => _pickImage(ImageSource.gallery),
                 ),
               ],
             ),
-            const SizedBox(height: 50),
+            const SizedBox(height: 40),
 
             // 결과 표시 영역
-            Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Center(
-                child: Text(
-                  '여기에 촬영된 이미지 및 질병 진단 결과가 표시됩니다.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
+            _buildResultArea(context),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildImageButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: _isLoading ? null : onPressed,
+      icon: Icon(icon),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      ),
+    );
+  }
+
+  Widget _buildResultArea(BuildContext context) {
+    return Container(
+      height: 300,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: (_pickedFile == null)
+                ? Center(child: Text(_result, textAlign: TextAlign.center))
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(9),
+                    child: kIsWeb
+                        ? Image.memory(
+                            _imageBytes!, // 🚨 웹: Image.memory 사용
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                          )
+                        : Image.file(
+                            // 🚨 모바일: Image.file 사용
+                            File(_pickedFile!.path),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                          ),
+                  ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(12),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Theme.of(context).primaryColor.withOpacity(0.1),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(10),
+              ),
+            ),
+            child: _isLoading
+                ? const Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          '진단 중...',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  )
+                : Text(
+                    _result,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -118,21 +275,20 @@ class _DiseaseDiagnosisScreenState extends State<DiseaseDiagnosisScreen> {
               vertical: 10,
             ),
           ),
-          value: _selectedCrop,
-          items: _crops.map((String crop) {
+          value: _selectedCropName,
+          items: _cropNames.map((String crop) {
             return DropdownMenuItem<String>(value: crop, child: Text(crop));
           }).toList(),
           onChanged: (String? newValue) {
             setState(() {
-              _selectedCrop = newValue;
+              _selectedCropName = newValue!;
+              _result = '$_selectedCropName을(를) 선택했습니다. 이미지를 선택해 주세요.';
+              _pickedFile = null; // 작물 변경 시 이미지 초기화
+              _imageBytes = null;
             });
           },
         ),
       ],
     );
   }
-}
-
-void _showSnackBar(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }
