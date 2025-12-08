@@ -21,13 +21,6 @@ class _FieldRecordScreenState extends ConsumerState<FieldRecordScreen> {
   String _diseaseStatus = '정상';
   DateTime _selectedDate = DateTime.now();
 
-  final List<String> _diseaseOptions = [
-    '정상',
-    '고추 탄저병', '고추 흰가루병',
-    '상추 노균병', '상추 흰가루병',
-    // ... 나머지 작물들의 질병 클래스를 추가하세요.
-  ];
-
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -131,24 +124,14 @@ class _FieldRecordScreenState extends ConsumerState<FieldRecordScreen> {
               ),
               const SizedBox(height: 20),
 
-              // 4. 질병 발생 유형 (Dropdown)
-              DropdownButtonFormField<String>(
+              // ⭐️ 4. 질병 발생 유형 (TextFormField로 변경)
+              TextFormField(
                 decoration: const InputDecoration(
-                  labelText: '질병 발생 유형',
+                  labelText: '질병 발생 유형 (예: 고추 탄저병 또는 정상)',
                   border: OutlineInputBorder(),
                 ),
-                value: _diseaseStatus,
-                items: _diseaseOptions.map((String status) {
-                  return DropdownMenuItem<String>(
-                    value: status,
-                    child: Text(status),
-                  );
-                }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _diseaseStatus = newValue!;
-                  });
-                },
+                validator: (value) =>
+                    value == null || value.isEmpty ? '질병 상태를 입력해주세요.' : null,
                 onSaved: (value) => _diseaseStatus = value!,
               ),
               const SizedBox(height: 20),
